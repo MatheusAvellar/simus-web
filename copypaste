@@ -1,0 +1,15 @@
+ A
+
+; Se a entrada for 0 termina o programa
+       AND 0
+       JZ  FIM
+
+; Testa se é par (bit 0=0)
+       LDA A
+       AND #1
+       JNZ SENAO
+
+; Se for, faz pares++
+       LDA PARES
+       ADD #1
+       STA PARES

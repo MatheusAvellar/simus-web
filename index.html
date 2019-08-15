@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title> SimuS Web </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link href="https://fonts.googleapis.com/css?family=Roboto+Mono:300,400&display=swap" rel="stylesheet"/>
+  <link href="tln.min.css" rel="stylesheet"/>
+  <script src="./tln.min.js"></script>
+  <style>
+    body,main,section {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      background-color: #efefef;
+      width: 100%;
+      height: 100%;
+      min-width: 100%;
+      min-height: 100%;
+    }
+    header {
+      height: 20%;
+    }
+    main {
+      height: 80vh;
+      max-height: 80vh;
+      display: grid;
+      grid-template-columns: auto 1fr;
+    }
+    [id$="wrapper"] {
+      height: 80vh;
+      font-family: "Roboto Mono", monospace;
+    }
+    #code-editor {
+      border-right-width: 0;
+      border-bottom-width: 0;
+    }
+    #hex-wrapper {
+      overflow-y: scroll;
+      background-color: #fff;
+      border: 1px solid #aeaeae;
+      border-left-width: 0;
+      border-bottom-width: 0;
+      font-size: 85%;
+    }
+    #hex-wrapper > ol {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    #hex-wrapper > ol > li {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      line-height: 1.7em;
+      border-bottom: 1px solid #aeaeae;
+    }
+    #hex-wrapper > ol > li:hover {
+      background-color: #e0e0ff;
+    }
+    #hex-wrapper > ol > li > .label {
+      background-color: #858585;
+      padding: .2em;
+      color: #fff;
+      user-select: none;
+      cursor: default;
+    }
+    #hex-wrapper > ol > li > .byte {
+      margin: 0 .35em;
+      font-weight: 300;
+    }
+  </style>
+  <style>
+    #code-wrapper {
+      position: relative;
+    }
+    #code-editor {
+      margin: 0;
+      border-radius: 0;
+      color: #444;
+      background-color: transparent;
+      position: relative;
+      z-index: 1;
+    }
+    #backdrop {
+      width: calc(100% - 48px);
+      margin-left: 48px;
+      height: 100%;
+      box-sizing: border-box;
+      position: absolute;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      background-color: #fff;
+    }
+    #highlights {
+      position: absolute;
+      font-family: "Roboto Mono",monospace;
+      border: 1px solid transparent;
+      overflow-wrap: normal;
+      overflow-x: auto;
+      white-space: pre;
+      box-sizing: border-box;
+      line-height: 1.5;
+      color: transparent;
+      padding: 10px;
+    }
+    mark {
+      color: transparent;
+      border-radius: 3px;
+      background-color: #fff;
+    }
+    .highlight-number {
+      background-color: #ebdaff;
+    }
+    .highlight-operation {
+      background-color: #cce3ee;
+    }
+    .highlight-keyword {
+      background-color: #d4e9ab;
+    }
+    .highlight-label {
+      background-color: #bbe4c6;
+    }
+    .highlight-comment {
+      background-color: #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <button> Compile </button>
+      <button> Run </button>
+    </nav>
+    <output> SIMUS </output>
+  </header>
+  <main>
+    <section id="hex-wrapper"></section>
+    <section id="code-wrapper">
+      <div id="backdrop">
+        <div id="highlights">
+          <!-- cloned text with <mark> tags here -->
+        </div>
+      </div>
+      <textarea id="code-editor" spellcheck="false"></textarea>
+    </section>
+  </main>
+  <script>
+    //https://codersblock.com/blog/highlight-text-inside-a-textarea/
+    const code_editor = document.getElementById("code-editor");
+    const highlights = document.getElementById("highlights");
+    const backdrop = document.getElementById("backdrop");
+    code_editor.addEventListener("input", handleInput);
+    code_editor.addEventListener("scroll", handleScroll);
+    code_editor.addEventListener("mousewheel", handleScroll);
+    function handleInput() {
+      const text = code_editor.value;
+      const highlightedText = applyHighlights(text);
+      highlights.innerHTML = highlightedText;
+    }
+    function applyHighlights(text) {
+      const operationsRegEx = /(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
+      const keywordRegEx = /(ORG|END|DS|DB|STR)\b/g;
+      const labelRegEx = /[A-Za-z]+:/g;
+      const decimalNumbersRegEx = /\s([@#]?[0-9]+\b)/g;
+      const commentsRegEx = /;.*/g;
+
+
+      // FIXME: this doesn't deal with nested regex matches. For example,
+      // the string "; Number 1" matches both for comment and for number
+      // ([; Number [1]]), when it should only match for comment
+      return text
+        //.replace(/\n$/g, "\n\n")
+        .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
+        .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
+        .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
+        .replace(labelRegEx, `<mark class="highlight-label">$&</mark>`)
+        .replace(commentsRegEx, `<mark class="highlight-comment">$&</mark>`);
+    }
+    function handleScroll() {  backdrop.scrollTop = code_editor.scrollTop;  }
+
+    // Generate memory viewer
+    function generateMemView() {
+      const hex_wrapper = document.getElementById("hex-wrapper");
+
+      // e.g. 0x02 == from 0x0000 to 0x02FF
+      // P.S. Yes, this sucks, I know
+      const MEM_SIZE = 0x02;
+
+      // Generate all labels
+      for(let i = 0; i <= MEM_SIZE; i++) {
+
+        // Build a fragment to insert <li>'s
+        const ol_fragment = document.createDocumentFragment();
+
+        for(let j = i*0x100; j < 0xFF+i*0x100; j += 0x10) {
+          // Create fragment for <li>
+          const li_fragment = document.createDocumentFragment();
+
+          const label = document.createElement("span");
+          label.className = "label";
+          label.textContent = j.toString(16).toUpperCase().padStart(4,"0");
+          li_fragment.appendChild(label);
+
+          for(let k = 0; k <= 0xF; k++) {
+            const byte = document.createElement("span");
+            byte.textContent = "00";
+            byte.id = (j + k).toString(16).toUpperCase().padStart(4,"0");
+            byte.className = "byte";
+            li_fragment.appendChild(byte);
+          }
+
+          // Insert fragment into <li>
+          const li = document.createElement("li");
+          li.id = (j/16).toString(16).toUpperCase().padStart(2,"0")+"X";
+          li.appendChild(li_fragment);
+
+          // Insert <li> into <ol> fragment
+          ol_fragment.appendChild(li);
+        }
+
+        // Insert fragment into <ol>
+        const ol = document.createElement("ol");
+        ol.id = i.toString(16).toUpperCase().padStart(2,"0").padEnd(4,"X");
+        ol.appendChild(ol_fragment);
+
+        // Insert <ol> into hex editor
+        hex_wrapper.appendChild(ol);
+      }
+    }
+    generateMemView();
+
+
+    // Insert sample code into editor
+    code_editor.value = `ORG 0
+
+INICIO:
+; Faz a leitura do painel de chaves
+       IN  0
+       STA A
+
+; Se a entrada for 0 termina o programa
+       AND 0
+       JZ  FIM
+
+; Testa se é par (bit 0=0)
+       LDA A
+       AND #1
+       JNZ SENAO
+
+; Se for, faz pares++
+       LDA PARES
+       ADD #1
+       STA PARES
+       JMP INICIO
+
+SENAO:
+; Incrementa I
+       LDA IMPARES
+       ADD #1
+       STA IMPARES
+       JMP INICIO
+FIM:    HLT
+
+ORG 100
+A:      DS  1
+PARES:  DS  1
+IMPARES:DS  1
+
+END 0`;
+    TLN.append_line_numbers("code-editor");
+
+    code_editor.dispatchEvent(new Event("input", {
+      "bubbles": true, "cancelable": true
+    }));
+  </script>
+</body>
+</html>
