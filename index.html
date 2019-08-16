@@ -4,9 +4,6 @@
   <meta charset="utf-8"/>
   <title> SimuS Web </title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link href="https://fonts.googleapis.com/css?family=Roboto+Mono:300,400&display=swap" rel="stylesheet"/>
-  <link href="tln.min.css" rel="stylesheet"/>
-  <script src="./tln.min.js"></script>
   <style>
     body,main,section {
       box-sizing: border-box;
@@ -86,8 +83,8 @@
     }
     #backdrop {
       width: calc(100% - 48px);
-      margin-left: 48px;
       height: 100%;
+      margin-left: 48px;
       box-sizing: border-box;
       position: absolute;
       z-index: 0;
@@ -105,7 +102,12 @@
       box-sizing: border-box;
       line-height: 1.5;
       color: transparent;
-      padding: 10px;
+      padding: 10px 10px 25px;
+      height: 100%;
+      width: 100%;
+    }
+    #highlights.hidden {
+      display: none;
     }
     mark {
       color: transparent;
@@ -129,7 +131,7 @@
     }
   </style>
 </head>
-<body>
+<body onload="init();">
   <header>
     <nav>
       <button> Compile </button>
@@ -141,21 +143,76 @@
     <section id="hex-wrapper"></section>
     <section id="code-wrapper">
       <div id="backdrop">
-        <div id="highlights">
-          <!-- cloned text with <mark> tags here -->
-        </div>
+        <div id="highlights"></div>
       </div>
       <textarea id="code-editor" spellcheck="false"></textarea>
     </section>
   </main>
   <script>
-    //https://codersblock.com/blog/highlight-text-inside-a-textarea/
     const code_editor = document.getElementById("code-editor");
     const highlights = document.getElementById("highlights");
     const backdrop = document.getElementById("backdrop");
-    code_editor.addEventListener("input", handleInput);
-    code_editor.addEventListener("scroll", handleScroll);
-    code_editor.addEventListener("mousewheel", handleScroll);
+    let sim;
+
+    function init() {
+      toggleSyntaxHighlighting(true);
+
+      // Generate memory viewer
+      generateMemView();
+
+      // <textarea> line numbers (by myself :D) via:
+      // https://github.com/MatheusAvellar/textarea-line-numbers
+      TLN.append_line_numbers("code-editor");
+
+      // Create SimuS instance
+      sim = new SimuS();
+    }
+
+    // Syntax Highlighting on <textarea> trick via:
+    // https://codersblock.com/blog/highlight-text-inside-a-textarea/
+    let syntaxHighlightingAlreadyOn = false;
+    function toggleSyntaxHighlighting(turnOn) {
+      // Ensure values are boolean
+      turnOn = !!turnOn;
+      syntaxHighlightingAlreadyOn = !!syntaxHighlightingAlreadyOn;
+
+      // Event names and handlers
+      const eventHooks = [
+        { name: "input", fun: handleInput },
+        { name: "input", fun: handleScroll },
+        { name: "scroll", fun: handleScroll },
+        { name: "mousewheel", fun: handleScroll },
+      ];
+
+      // If requested to turn on, and is already on
+      if(turnOn && syntaxHighlightingAlreadyOn)
+        // Leave
+        return;
+
+      // Show / Hide highlights
+      if(turnOn)
+        highlights.classList.remove("hidden");
+      else
+        highlights.classList.add("hidden");
+
+      // Hook / Unhook each event from the array
+      for(let event of eventHooks) {
+        // If requested to turn on, then hook events
+        if(turnOn)
+          code_editor.addEventListener(event.name, event.fun);
+        // Otherwise, unhook them
+        else
+          code_editor.removeEventListener(event.name, event.fun);
+      }
+
+      // Trigger input event to update highlighting
+      code_editor.dispatchEvent(new Event("input", {
+        "bubbles": true, "cancelable": true
+      }));
+
+      // Update syntax highlighting tracking variable
+      syntaxHighlightingAlreadyOn = turnOn;
+    }
     function handleInput() {
       const text = code_editor.value;
       const highlightedText = applyHighlights(text);
@@ -173,22 +230,30 @@
       // the string "; Number 1" matches both for comment and for number
       // ([; Number [1]]), when it should only match for comment
       return text
-        //.replace(/\n$/g, "\n\n")
+        .replace(/\n$/g, "\n\n")
         .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
         .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
         .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
         .replace(labelRegEx, `<mark class="highlight-label">$&</mark>`)
         .replace(commentsRegEx, `<mark class="highlight-comment">$&</mark>`);
     }
-    function handleScroll() {  backdrop.scrollTop = code_editor.scrollTop;  }
+    function handleScroll() {
+      highlights.scrollTop = code_editor.scrollTop;
+      highlights.scrollLeft = code_editor.scrollLeft;
+    }
+
+    async function sleep(ms) {
+      return await new Promise(resolve => setTimeout(resolve, ms));
+    }
 
     // Generate memory viewer
-    function generateMemView() {
+    async function generateMemView() {
       const hex_wrapper = document.getElementById("hex-wrapper");
 
       // e.g. 0x02 == from 0x0000 to 0x02FF
+      //      0x7F == from 0x0000 to 0x7FFF
       // P.S. Yes, this sucks, I know
-      const MEM_SIZE = 0x02;
+      const MEM_SIZE = 0x7F;
 
       // Generate all labels
       for(let i = 0; i <= MEM_SIZE; i++) {
@@ -229,41 +294,44 @@
 
         // Insert <ol> into hex editor
         hex_wrapper.appendChild(ol);
+
+        // Prevent blocking of main thread due to the
+        // 65535+ (0xFFFF) new nodes being added
+        // Perhaps I should lazy-load it?
+        await sleep(75);
       }
     }
-    generateMemView();
-
 
     // Insert sample code into editor
     code_editor.value = `ORG 0
 
 INICIO:
 ; Faz a leitura do painel de chaves
-       IN  0
-       STA A
+      IN  0
+      STA A
 
 ; Se a entrada for 0 termina o programa
-       AND 0
-       JZ  FIM
+      AND 0
+      JZ  FIM
 
 ; Testa se é par (bit 0=0)
-       LDA A
-       AND #1
-       JNZ SENAO
+      LDA A
+      AND #1
+      JNZ SENAO
 
 ; Se for, faz pares++
-       LDA PARES
-       ADD #1
-       STA PARES
-       JMP INICIO
+      LDA PARES
+      ADD #1
+      STA PARES
+      JMP INICIO
 
 SENAO:
 ; Incrementa I
-       LDA IMPARES
-       ADD #1
-       STA IMPARES
-       JMP INICIO
-FIM:    HLT
+      LDA IMPARES
+      ADD #1
+      STA IMPARES
+      JMP INICIO
+FIM:  HLT
 
 ORG 100
 A:      DS  1
@@ -271,11 +339,10 @@ PARES:  DS  1
 IMPARES:DS  1
 
 END 0`;
-    TLN.append_line_numbers("code-editor");
-
-    code_editor.dispatchEvent(new Event("input", {
-      "bubbles": true, "cancelable": true
-    }));
   </script>
+  <link href="https://fonts.googleapis.com/css?family=Roboto+Mono:300,400&display=swap" rel="stylesheet"/>
+  <link href="./tln.min.css" rel="stylesheet"/>
+  <script src="./tln.min.js"></script>
+  <script src="./simus.js"></script>
 </body>
 </html>
