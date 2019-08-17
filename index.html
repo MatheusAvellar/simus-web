@@ -9,6 +9,9 @@
       box-sizing: border-box;
     }
     html, body {
+      font-family: -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, Helvetica, Arial, sans-serif,
+      "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
       margin: 0;
       background-color: #efefef;
       width: 100%;
@@ -18,15 +21,72 @@
     }
     header {
       height: 20%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      margin: 0 1em;
+    }
+    button {
+      border-radius: 3px;
+      border: 1px solid #1fa0e0;
+      padding: 0.25em 0.5em;
+      background-color: #d2ecf9;
+      outline: 0;
+    }
+    button:focus {
+      background-color: #a5d9f3;
+    }
+    button:active {
+      background-color: #9bcfe9;
+    }
+    button[disabled] {
+      background-color: #e7e7e7;
+      border-color: #898989;
+    }
+    input,output {
+      width: 100%;
+      max-width: 600px;
+      padding: 0.5em 1em;
+      border-radius: 3px;
+      display: inline-block;
+      vertical-align: middle;
+      font-family: "Roboto Mono", monospace;
+      font-size: inherit;
+      border: 1px solid;
+      box-sizing: border-box;
+    }
+    input {
+      border-color: #aeaeae;
+    }
+    output {
+      border-color: #aeaeae;
+      background-color: #282828;
+      color: #eee;
+    }
+    label > span {
+      display: inline-block;
+      width: 3.5em;
+      margin-right: .2em;
+      text-align: right;
+      color: #aeaeae;
     }
     main {
-      height: 80vh;
-      max-height: 80vh;
+      height: 80%;
       display: grid;
       grid-template-columns: auto 1fr;
     }
-    [id$="wrapper"] {
-      height: 80vh;
+    section.header {
+      box-sizing: border-box;
+      height: 3vh;
+      align-self: center;
+      vertical-align: middle;
+      line-height: 3vh;
+      padding: 0 48px;
+      color: #aeaeae;
+    }
+    section[id$="wrapper"] {
+      box-sizing: border-box;
+      height: 77vh;
       font-family: "Roboto Mono", monospace;
     }
     #code-editor {
@@ -62,14 +122,18 @@
       padding: .2em;
       color: #fff;
       user-select: none;
+      -moz-user-select: none;
       cursor: default;
+      width: 48px;
+      text-align: center;
+      box-sizing: border-box;
     }
     #hex-wrapper > ol > li > .byte {
       margin: 0 .35em;
       font-weight: 300;
     }
   </style>
-  <style>
+  <style data-for="highlights">
     #code-wrapper {
       position: relative;
     }
@@ -135,11 +199,21 @@
   <header>
     <nav>
       <button> Compile </button>
-      <button> Run </button>
+      <button disabled> Run </button>
+      <button disabled> Step </button>
     </nav>
-    <output> SIMUS </output>
+    <label>
+      <span>Input:</span>
+      <input placeholder="SIMUS" type="text"/>
+    </label>
+    <label>
+      <span>Output:</span>
+      <output>SIMUS</output>
+    </label>
   </header>
   <main>
+    <section class="header">Memory</section>
+    <section class="header">Code</section>
     <section id="hex-wrapper"></section>
     <section id="code-wrapper">
       <div id="backdrop">
