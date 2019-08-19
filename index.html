@@ -144,6 +144,9 @@
       background-color: transparent;
       position: relative;
       z-index: 1;
+      tab-size: 2;
+      -o-tab-size: 2;
+      -moz-tab-size: 2;
     }
     #backdrop {
       width: calc(100% - 48px);
@@ -169,6 +172,9 @@
       padding: 10px 10px 25px;
       height: 100%;
       width: 100%;
+      tab-size: 2;
+      -o-tab-size: 2;
+      -moz-tab-size: 2;
     }
     #highlights.hidden {
       display: none;
@@ -181,11 +187,14 @@
     .highlight-number {
       background-color: #ebdaff;
     }
+    .highlight-string {
+      background-color: #d4e9ab;
+    }
     .highlight-operation {
       background-color: #cce3ee;
     }
     .highlight-keyword {
-      background-color: #d4e9ab;
+      background-color: #ffcccc;
     }
     .highlight-label {
       background-color: #bbe4c6;
@@ -293,18 +302,19 @@
       highlights.innerHTML = highlightedText;
     }
     function applyHighlights(text) {
-      const operationsRegEx = /(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
-      const keywordRegEx = /(ORG|END|DS|DB|STR)\b/g;
-      const labelRegEx = /[A-Za-z]+:/g;
-      const decimalNumbersRegEx = /\s([@#]?[0-9]+\b)/g;
+      const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
+      const keywordRegEx = /\b(ORG|END|DS|DB|DW|STR|EQU)\b/g;
+      const labelRegEx = /[A-Za-z_]+:(\b|$)/gm;
+      const decimalNumbersRegEx = /\s([@#]?[0-9]+[HB]?$)/mg;
+      const stringsRegEx = /\"[ !#-~]*\"/g;
       const commentsRegEx = /;.*/g;
-
 
       // FIXME: this doesn't deal with nested regex matches. For example,
       // the string "; Number 1" matches both for comment and for number
       // ([; Number [1]]), when it should only match for comment
       return text
         .replace(/\n$/g, "\n\n")
+        .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
         .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
         .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
         .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
@@ -327,7 +337,7 @@
       // e.g. 0x02 == from 0x0000 to 0x02FF
       //      0x7F == from 0x0000 to 0x7FFF
       // P.S. Yes, this sucks, I know
-      const MEM_SIZE = 0x7F;
+      const MEM_SIZE = 0x0F;
 
       // Generate all labels
       for(let i = 0; i <= MEM_SIZE; i++) {
@@ -381,36 +391,32 @@
 
 INICIO:
 ; Faz a leitura do painel de chaves
-      IN  0
-      STA A
-
+     IN  0
+     STA A
 ; Se a entrada for 0 termina o programa
-      AND 0
-      JZ  FIM
-
+     OR  #0
+     JZ  FIM
 ; Testa se é par (bit 0=0)
-      LDA A
-      AND #1
-      JNZ SENAO
-
+     LDA A
+     AND #1
+     JNZ SENAO
 ; Se for, faz pares++
-      LDA PARES
-      ADD #1
-      STA PARES
-      JMP INICIO
-
+     LDA PARES
+     ADD #1
+     STA PARES
+     JMP INICIO
 SENAO:
 ; Incrementa I
-      LDA IMPARES
-      ADD #1
-      STA IMPARES
-      JMP INICIO
-FIM:  HLT
+     LDA IMPARES
+     ADD #1
+     STA IMPARES
+     JMP INICIO
+FIM: HLT
 
 ORG 100
-A:      DS  1
-PARES:  DS  1
-IMPARES:DS  1
+A:       DS 1
+PARES:   DS 1
+IMPARES: DS 1
 
 END 0`;
   </script>

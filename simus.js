@@ -72,6 +72,16 @@ class SimuS {
 
     // Split each line of the program
     program = program.split("\n");
+
+    // Preprocess each line
+    for(let i = 0, l = program.length; i < l; i++) {
+      // Reposition cursor
+      this.cursor.line++;
+      this.cursor.column = 0;
+      program[i] = this.preprocess(program[i]);
+    }
+
+    // Compile each line
     while(program.length > 0) {
       // Reposition cursor
       this.cursor.line++;
@@ -96,9 +106,90 @@ class SimuS {
     return [res, ch, program];
   }
 
-  lexer(program) {
+  preprocess(line) {
+    // If we have a comment on this line,
+    // get only what comes before it
+    line = line.split(";")[0];
+    // If line is/became empty, let's leave
+    if(line.length <= 0) return "";
+    // Turn string into array
+    line = line.split("");
+
+    // RegEx constants
+    const WS = /[ \t]/;
+
+    let _;        // Disposable placeholder variable
+    let ch;       // Current character
+    let line_err = this.error_t.NONE; // Error tracker
+
+    // Consume whitespace
+    [_,ch,line] = this.consume(WS,...this.readNext(line));
+
+    // Consume letters
+    let word = "";
+    [word,ch,line] = this.consume(/[A-Z]/,ch,line);
+
+    switch(word) {
+      case "ORG":
+      case "END":
+      case "DS":
+        // Consume whitespace
+        [_,ch,line] = this.consume(WS,...this.readNext(line));
+
+        let arg = "";
+        [arg,ch,line] = this.consume(/[0-9]/,ch,line);
+
+        console.log(`${word} ${arg}`);
+        break;
+      case "DB":
+      case "DW":
+        break;
+      case "STR":
+        // Consume whitespace
+        [_,ch,line] = this.consume(WS,...this.readNext(line));
+
+        if(ch === `"`) {
+          // String of printable ASCII (except double quotes)
+          let str = "";
+          [str,ch,line] = this.consume(/[ !#-~]/,...this.readNext(line));
+
+          if(ch === `"`) {
+            console.log(`String "${str}"`);
+          } else {
+            // String is opened but never closed
+            // e.g. STR "Banana
+            line_err = this.error_t.INVALID_ARG;
+            this.error_list.push({
+              cat: `Syntax`,
+              desc: `Unmatched string delimiter <">`,
+              pos: this.copyOf(this.cursor)
+            });
+          }
+        } else {
+          // We have STR but not a string afterwards
+          // e.g. STR 0
+          line_err = this.error_t.INVALID_ARG;
+          this.error_list.push({
+            cat: `Syntax`,
+            desc: `'STR' keyword not followed by string`,
+            pos: this.copyOf(this.cursor)
+          });
+        }
+        break;
+      default:
+        if(ch === ':') {
+          console.log(`Label ${word}:`);
+        }
+        break;
+    }
+
+    // Return as string
+    return line.join("");
+  }
+
+  lexer(line) {
     // If line is empty (or only whitespace), skip it
-    if(program.filter(i=>i.trim().length).length <= 0)
+    if(line.filter(i=>i.trim().length).length <= 0)
       return;
 
     // RegEx constants
@@ -110,17 +201,13 @@ class SimuS {
     let ch;       // Current character
     let op = "";  // Instruction
     let arg = ""; // Argument
-    let inside_comment = false;       // Comment tracker
     let line_err = this.error_t.NONE; // Error tracker
 
     // Ignore whitespace at the beginning
-    [_,ch,program] = this.consume(WS,...this.readNext(program));
-
-    // If we reach a comment, we're done here
-    if(ch === ';') return;
+    [_,ch,line] = this.consume(WS,...this.readNext(line));
 
     // Consume an instruction
-    [op,ch,program] = this.consume(OP,ch,program);
+    [op,ch,line] = this.consume(OP,ch,line);
 
     // If this is a valid instruction, write its hex
     // value to memory
@@ -128,110 +215,52 @@ class SimuS {
       this.memory[this.mem_ptr] = this.operations[op];
       this.mem_ptr++;
     } else {
-      // We found a word, but it's not a valid instruction
-
-      // Let's check if it's a label before erroring
-      if(ch === ':') {
-        // Hurray, it's a label!
-        // If this label has already been defined
-        if(this.labels.hasOwnProperty(op)) {
-          // Woops!
-          line_err = this.error_t.ALREADY_DEFINED;
-          this.error_list.push({
-            cat: `Syntax`,
-            desc: `Label ${op} has already been defined`,
-            pos: this.copyOf(this.cursor)
-          });
-        }
-        // If it hasn't been defined
-        else {
-          // Add it to our dictionary
-          this.labels[op] = this.mem_ptr;
-          // We no longer have an instruction
-          op = "";
-
-          // Let's try finding another instruction
-          // Consume all whitespace after this label
-          [_,ch,program] = this.consume(WS,...this.readNext(program));
-          // If we reach a comment, we're done here
-          if(ch === ';') return;
-          // Consume an instruction
-          [op,ch,program] = this.consume(OP,ch,program);
-          if(this.operations.hasOwnProperty(op)) {
-            this.memory[this.mem_ptr] = this.operations[op];
-            this.mem_ptr++;
-          } else {
-            // FIXME: This code is a mess, and you could
-            // have multiple labels one after the other;
-            // Perhaps turn this into a while() loop?
-
-            // We have consumed a label already (!)
-            // and a new instruction isn't valid
-            line_err = this.error_t.INVALID_OP;
-            this.error_list.push({
-              cat: `Syntax`,
-              desc: `Unknown instruction ${op}`,
-              pos: this.copyOf(this.cursor)
-            });
-          }
-        }
-        //... do label things idk
-      } else {
-        // It's not a label and not an instruction,
-        // it's gotta be an error
-        line_err = this.error_t.INVALID_OP;
-        this.error_list.push({
-          cat: `Syntax`,
-          desc: `Unknown instruction ${op}`,
-          pos: this.copyOf(this.cursor)
-        });
-      }
+      // It's not a label and not an instruction,
+      // it's gotta be an error
+      line_err = this.error_t.INVALID_OP;
+      this.error_list.push({
+        cat: `Syntax`,
+        desc: `Unknown instruction ${op}`,
+        pos: this.copyOf(this.cursor)
+      });
     }
 
     // Ignore whitespace between instruction and argument
-    [_,ch,program] = this.consume(WS,...this.readNext(program));
+    [_,ch,line] = this.consume(WS,...this.readNext(line));
 
-    // If we reach a comment, we're done here
-    if(ch === ';') inside_comment = true;
+    // Consume an argument
+    [arg,ch,line] = this.consume(ARG,ch,line);
 
-    if(!inside_comment) {
-      // Consume an argument
-      [arg,ch,program] = this.consume(ARG,ch,program);
-
-      // If argument exists, and instruction is valid
-      if(arg.length > 0
-      && line_err !== this.error_t.INVALID_OP) {
-        // If argument is a valid number
-        const arg_value = Number(arg);
-        if(arg_value <= 255 && !isNaN(arg_value)) {
-          // Write argument to memory
-          this.memory[this.mem_ptr] = arg;
-          this.mem_ptr++;
-        } else {
-          // We have an argument, but it's not a
-          // number
-          line_err = this.error_t.INVALID_ARG;
-          this.error_list.push({
-            cat: `Syntax`,
-            desc: `Invalid argument '${arg}'`,
-            pos: this.copyOf(this.cursor)
-          });
-        }
+    // If argument exists, and instruction is valid
+    if(arg.length > 0
+    && line_err !== this.error_t.INVALID_OP) {
+      // If argument is a valid number
+      const arg_value = Number(arg);
+      if(arg_value <= 255 && !isNaN(arg_value)) {
+        // Write argument to memory
+        this.memory[this.mem_ptr] = arg;
+        this.mem_ptr++;
+      } else {
+        // We have an argument, but it's not a
+        // number
+        line_err = this.error_t.INVALID_ARG;
+        this.error_list.push({
+          cat: `Syntax`,
+          desc: `Invalid argument '${arg}'`,
+          pos: this.copyOf(this.cursor)
+        });
       }
 
       // Consume whitespaces after argument
-      [_,ch,program] = this.consume(WS,...this.readNext(program));
+      [_,ch,line] = this.consume(WS,...this.readNext(line));
     }
 
-    // If we reach a comment, we're done here
-    if(ch === ';') inside_comment = true;
-
     // If we have something in the buffer
-    if(!inside_comment && ch.length !== 0) {
+    if(ch.length !== 0) {
       // Gather everything left
       let garbage_pos = this.copyOf(this.cursor);
       let trailing_garbage = "";
-      [trailing_garbage,ch,program] = this.consume(/[^;\n]/,...this.readNext(program));
+      [trailing_garbage,ch,line] = this.consume(/[^;\n]/,...this.readNext(line));
 
       // We found something that isn't whitespace
       // or a comment => error
