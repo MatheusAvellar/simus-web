@@ -10,11 +10,13 @@ class SimuS {
       MILD: 3
     };
 
+    this.intermediate = [];
+    this.labels = [];
+
     this.mem_ptr = 0;
     this.cursor = {
       line: 0, column: 0
     };
-    this.labels = {};
 
     this.PC = 0;
     this.operations = {
@@ -73,23 +75,13 @@ class SimuS {
     // Split each line of the program
     program = program.split("\n");
 
-    // Preprocess each line
-    for(let i = 0, l = program.length; i < l; i++) {
-      // Reposition cursor
-      this.cursor.line++;
-      this.cursor.column = 0;
-      program[i] = this.preprocess(program[i]);
-    }
-
     // Compile each line
     while(program.length > 0) {
       // Reposition cursor
       this.cursor.line++;
       this.cursor.column = 0;
-      // Get next line, split it into an array
-      let line = program.shift().split("");
-      // Analyse syntax
-      this.lexer(line);
+      // Analyse syntax on next line
+      this.lexer(program.shift());
     }
     // If there were any errors, report them
     if(this.error_list.length > 0) {
@@ -106,205 +98,166 @@ class SimuS {
     return [res, ch, program];
   }
 
-  preprocess(line) {
-    // If we have a comment on this line,
-    // get only what comes before it
+  lexer(line) {
+    // If we have a comment on this line, get only what comes before it
     line = line.split(";")[0];
     // If line is/became empty, let's leave
-    if(line.length <= 0) return "";
-    // Turn string into array
+    if(line.trim().length <= 0) return "";
+    // Turn line into array
     line = line.split("");
 
     // RegEx constants
+    // Whitespace (space or tab)
     const WS = /[ \t]/;
+    // Letters, underscore or ':'
+    /* FIXME: This matches multiple ':'s, which is not good! */
+    const ALPHA = /[A-Z_:]/;
+    // Argument: letter, underscore, #, @ or digit
+    const ARG = /[A-Z_#@0-9]/;
 
-    let _;        // Disposable placeholder variable
-    let ch;       // Current character
-    let line_err = this.error_t.NONE; // Error tracker
+    let _;          // Disposable placeholder variable (for whitespace 'words')
+    let ch;         // Current character
+    let word = "";  // Current word
+    let argc = "";  // Argument
 
-    // Consume whitespace
-    [_,ch,line] = this.consume(WS,...this.readNext(line));
-
-    // Consume letters
-    let word = "";
-    [word,ch,line] = this.consume(/[A-Z]/,ch,line);
-
-    switch(word) {
-      case "ORG":
-      case "END":
-      case "DS":
-        // Consume whitespace
-        [_,ch,line] = this.consume(WS,...this.readNext(line));
-
-        let arg = "";
-        [arg,ch,line] = this.consume(/[0-9]/,ch,line);
-
-        console.log(`${word} ${arg}`);
-        break;
-      case "DB":
-      case "DW":
-        break;
-      case "STR":
-        // Consume whitespace
-        [_,ch,line] = this.consume(WS,...this.readNext(line));
-
-        if(ch === `"`) {
-          // String of printable ASCII (except double quotes)
-          let str = "";
-          [str,ch,line] = this.consume(/[ !#-~]/,...this.readNext(line));
-
-          if(ch === `"`) {
-            console.log(`String "${str}"`);
-          } else {
-            // String is opened but never closed
-            // e.g. STR "Banana
-            line_err = this.error_t.INVALID_ARG;
-            this.error_list.push({
-              cat: `Syntax`,
-              desc: `Unmatched string delimiter <">`,
-              pos: this.copyOf(this.cursor)
-            });
-          }
-        } else {
-          // We have STR but not a string afterwards
-          // e.g. STR 0
-          line_err = this.error_t.INVALID_ARG;
-          this.error_list.push({
-            cat: `Syntax`,
-            desc: `'STR' keyword not followed by string`,
-            pos: this.copyOf(this.cursor)
-          });
-        }
-        break;
-      default:
-        if(ch === ':') {
-          console.log(`Label ${word}:`);
-        }
-        break;
-    }
-
-    // Return as string
-    return line.join("");
-  }
-
-  lexer(line) {
-    // If line is empty (or only whitespace), skip it
-    if(line.filter(i=>i.trim().length).length <= 0)
-      return;
-
-    // RegEx constants
-    const WS = /[ \t]/;
-    const OP = /[A-Z]/;
-    const ARG= /[0-9@#A-Z]/;
-
-    let _;        // Disposable placeholder variable
-    let ch;       // Current character
-    let op = "";  // Instruction
-    let arg = ""; // Argument
-    let line_err = this.error_t.NONE; // Error tracker
+    // Read first character
+    [ch,line] = this.readNext(line);
 
     // Ignore whitespace at the beginning
-    [_,ch,line] = this.consume(WS,...this.readNext(line));
+    [_,ch,line] = this.consume(WS,ch,line);
 
-    // Consume an instruction
-    [op,ch,line] = this.consume(OP,ch,line);
+    // Consume letters, underscore or :
+    [word,ch,line] = this.consume(ALPHA,ch,line);
 
-    // If this is a valid instruction, write its hex
-    // value to memory
-    if(this.operations.hasOwnProperty(op)) {
-      this.memory[this.mem_ptr] = this.operations[op];
-      this.mem_ptr++;
-    } else {
-      // It's not a label and not an instruction,
-      // it's gotta be an error
-      line_err = this.error_t.INVALID_OP;
-      this.error_list.push({
-        cat: `Syntax`,
-        desc: `Unknown instruction ${op}`,
-        pos: this.copyOf(this.cursor)
-      });
+    // If we found nothing but somehow we haven't returned before
+    if(!word.length) {
+      console.warn("(!) There should be no way to reach this point");
+      return "";
     }
+    // We found something, so let's check what it is
+    else {
+      // If it ends with ':', it's gotta be a label!
+      /* There's nothing preventing someone from defining multiple labels
+       * pointing to the same address, so let's loop through as many as we can
+       * find
+       */
+      while(word.slice(-1) === ':') {
+        // Add label to temporary storage so we can point it to the next
+        // instruction
+        this.labels.push(word.slice(0,-1));
+        // Clean what we had found before
+        word = "";
+        // Consume more whitespace
+        [_,ch,line] = this.consume(WS,ch,line);
+        // Consume letters + underscore + :
+        [word,ch,line] = this.consume(ALPHA,ch,line);
+      }
 
-    // Ignore whitespace between instruction and argument
-    [_,ch,line] = this.consume(WS,...this.readNext(line));
+      /* If we got here, there should be no labels in front of us anymore;
+       * Apart from variable names, everything should be predictable from now on
+       * Let's first check if what we found is an instruction
+       */
+      if(this.operations.hasOwnProperty(word)) {
+        // Alright, this is an instruction! Let's check for any arguments
+        // But firt, our usual whitespace consumption
+        [_,ch,line] = this.consume(WS,ch,line);
+        // Now let's look for A-Z, _, 0-9, #, @
+        // We'll deal with parsing the arguments later
+        [argc,ch,line] = this.consume(ARG,ch,line);
 
-    // Consume an argument
-    [arg,ch,line] = this.consume(ARG,ch,line);
+        // Put this "token" on intermediate list (so it's easier later to
+        // convert everything to hex)
+        const output = {
+          // Inform what is it we're putting there so we don't have to
+          // do the regex's all over again
+          type: "instruction",
+          // The actual instruction
+          ins: word,
+          // The arguments for it
+          arg: argc,
+          // Any and all label that have been defined immediatelly before this
+          label: this.copyOf(this.labels)
+        };
+        // Clean labels tracker
+        this.labels = [];
+        // Put this in the intermediate array so we can turn it to hex later
+        this.intermediate.push(output);
+      }
+      // What we found isn't an instruction, so let's see what else it could be
+      else {
+        // Everything from now on has at least a space after it, so let's read
+        // it already
+        [_,ch,line] = this.consume(WS,ch,line);
 
-    // If argument exists, and instruction is valid
-    if(arg.length > 0
-    && line_err !== this.error_t.INVALID_OP) {
-      // If argument is a valid number
-      const arg_value = Number(arg);
-      if(arg_value <= 255 && !isNaN(arg_value)) {
-        // Write argument to memory
-        this.memory[this.mem_ptr] = arg;
-        this.mem_ptr++;
-      } else {
-        // We have an argument, but it's not a
-        // number
-        line_err = this.error_t.INVALID_ARG;
+        switch(word) {
+          // ORG <addr>
+          case "ORG":
+          // END <addr>
+          case "END":
+          // DS <imm>
+          case "DS":
+            [argc,ch,line] = this.consume(/[0-9]/,ch,line);
+
+            if(argc.trim().length <= 0) {
+              // There's no argument to ORG?! That's absurd!
+              this.error_list.push({
+                cat: "Syntax",
+                desc: `ORG requires a number as an argument! E.g. "ORG 0"`,
+                pos: this.copyOf(this.cursor)
+              });
+            }
+            // There's supposedly a valid argument, let's push it to the list!
+            else {
+              const output = {
+                // Inform what is it we're putting there so we don't have to
+                // do the regex's all over again
+                type: "keyword",
+                // The "instruction" is that keyword
+                ins: word,
+                // The arguments for it
+                arg: argc,
+                // Add potential labels to this
+                label: this.copyOf(this.labels)
+              };
+              // Clean labels tracker
+              this.labels = [];
+              // Put this in the intermediate array
+              this.intermediate.push(output);
+            }
+            break;
+          // DB <imm>, <imm>, ...
+          case "DB":
+            break;
+          // DW <imm>, <imm>, ...
+          case "DW":
+            break;
+          // STR "<characters>"
+          case "STR":
+            break;
+          // <var> EQU <imm>
+          default:
+            break;
+        }
+      }
+
+      // Alright we've gotten what we came for, but let's make sure the
+      // programmer didn't put anything else in this line
+      // Eat up some whitespace
+      [_,ch,line] = this.consume(WS,ch,line);
+
+      let garbo = "";
+      // Let's check if there's, well, anything left
+      [garbo,ch,line] = this.consume(/[^ \t]/,ch,line);
+
+      // If we found anything, let's complain about it
+      if(garbo.trim().length > 0) {
+        garbo = garbo.trim();
         this.error_list.push({
-          cat: `Syntax`,
-          desc: `Invalid argument '${arg}'`,
+          cat: "Syntax",
+          desc: `Superfluous argument '${garbo}'`,
           pos: this.copyOf(this.cursor)
         });
       }
-
-      // Consume whitespaces after argument
-      [_,ch,line] = this.consume(WS,...this.readNext(line));
-    }
-
-    // If we have something in the buffer
-    if(ch.length !== 0) {
-      // Gather everything left
-      let garbage_pos = this.copyOf(this.cursor);
-      let trailing_garbage = "";
-      [trailing_garbage,ch,line] = this.consume(/[^;\n]/,...this.readNext(line));
-
-      // We found something that isn't whitespace
-      // or a comment => error
-      line_err = this.error_t.MILD;
-      this.error_list.push({
-        cat: `Syntax`,
-        desc: `Invalid value '${trailing_garbage.trim()}' after instruction`,
-        pos: garbage_pos
-      });
-    }
-
-    switch(line_err) {
-      case this.error_t.NONE:
-        console.log(
-`Instruction:  [${op}]
-with value of [0x${this.operations[op].toString(16).padStart(2,"0")}]
-with argument [${arg}]`);
-        break;
-
-      case this.error_t.INVALID_OP:
-        console.log(
-`Instruction:  [${op}] (invalid)
-with no value
-with argument [${arg}]`);
-        break;
-
-      case this.error_t.INVALID_ARG:
-        console.log(
-`Instruction:  [${op}]
-with value of [0x${this.operations[op].toString(16).padStart(2,"0")}]
-with argument [${arg}] (invalid)`);
-        break;
-
-      case this.error_t.MILD:
-        console.log(
-`Instruction:  [${op}]
-with value of [0x${this.operations[op].toString(16).padStart(2,"0")}]
-with argument [${arg}]
-with MILD error`);
-        break;
-
-      default:
-        console.log("?");
-        break;
     }
   }
 
@@ -314,8 +267,5 @@ with MILD error`);
       console.warn(`${i.cat} error on line ${i.pos.line}, column ${i.pos.column}
 ${i.desc}`);
     }
-  }
-
-  parser(ins) {
   }
 }
