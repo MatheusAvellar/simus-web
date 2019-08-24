@@ -304,16 +304,17 @@
     function applyHighlights(text) {
       const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
       const keywordRegEx = /\b(ORG|END|DS|DB|DW|STR|EQU)\b/g;
-      const labelRegEx = /[A-Za-z_]+:(\b|$)/gm;
-      const decimalNumbersRegEx = /\s([@#]?[0-9]+[HB]?$)/mg;
+      const labelRegEx = /[A-Z_]+:/gm;
+      const decimalNumbersRegEx = /\s([@#]?[0-9]+[HB]?)/mg;
       const stringsRegEx = /\"[ !#-~]*\"/g;
-      const commentsRegEx = /;.*/g;
+      const commentsRegEx = /;.*$/mg;
 
       // FIXME: this doesn't deal with nested regex matches. For example,
       // the string "; Number 1" matches both for comment and for number
       // ([; Number [1]]), when it should only match for comment
       return text
         .replace(/\n$/g, "\n\n")
+        .split("&").join("&amp;").split(">").join("&gt;").split("<").join("&lt;")
         .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
         .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
         .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)

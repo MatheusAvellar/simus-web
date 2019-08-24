@@ -12,6 +12,7 @@ class SimuS {
 
     this.intermediate = [];
     this.labels = [];
+    this.variables = [];
 
     this.mem_ptr = 0;
     this.cursor = {
@@ -71,6 +72,12 @@ class SimuS {
     this.error_list = [];
     // Reset cursor's Y position
     this.cursor.line = 0;
+    // Clear intermediate memory
+    this.intermediate = [];
+    // Clear variables list
+    this.variables = [];
+    // Clear labels list
+    this.labels = [];
 
     // Split each line of the program
     program = program.split("\n");
@@ -109,9 +116,10 @@ class SimuS {
     // RegEx constants
     // Whitespace (space or tab)
     const WS = /[ \t]/;
-    // Letters, underscore or ':'
-    /* FIXME: This matches multiple ':'s, which is not good! */
-    const ALPHA = /[A-Z_:]/;
+    // Letters and underscore
+    const ALPHA = /[A-Z_]/;
+    // Digits
+    const NUM = /[0-9]/;
     // Argument: letter, underscore, #, @ or digit
     const ARG = /[A-Z_#@0-9]/;
 
@@ -126,31 +134,46 @@ class SimuS {
     // Ignore whitespace at the beginning
     [_,ch,line] = this.consume(WS,ch,line);
 
-    // Consume letters, underscore or :
+    // Consume letters or underscore
     [word,ch,line] = this.consume(ALPHA,ch,line);
 
-    // If we found nothing but somehow we haven't returned before
+    // We hit something that isn't composed of letters (so, likely a number)
     if(!word.length) {
-      console.warn("(!) There should be no way to reach this point");
-      return "";
+      // Let's read whatever it is
+      [word,ch,line] = this.consume(/[^ \t]/,ch,line);
+      if(!word.length) {
+        // There's just nothing here somehow
+        return "";
+      } else {
+        // Whatever this is, I hate it, let's nag about it
+        this.error_list.push({
+          cat: "Syntax",
+          desc: `Unexpected non-word '${word}'`,
+          pos: this.copyOf(this.cursor)
+        });
+      }
     }
-    // We found something, so let's check what it is
+    // We found a word! Hurray! Let's check what it is
     else {
       // If it ends with ':', it's gotta be a label!
       /* There's nothing preventing someone from defining multiple labels
        * pointing to the same address, so let's loop through as many as we can
        * find
        */
-      while(word.slice(-1) === ':') {
+      while(ch === ':') {
         // Add label to temporary storage so we can point it to the next
         // instruction
-        this.labels.push(word.slice(0,-1));
+        this.labels.push(word);
         // Clean what we had found before
         word = "";
+        // Read next character (to get rid of the previous ':')
+        [ch,line] = this.readNext(line);
         // Consume more whitespace
         [_,ch,line] = this.consume(WS,ch,line);
-        // Consume letters + underscore + :
+        // Consume letters and underscore
         [word,ch,line] = this.consume(ALPHA,ch,line);
+        // <ch> buffer will contain the following character; we only loop if
+        // it's a ':'
       }
 
       /* If we got here, there should be no labels in front of us anymore;
@@ -161,61 +184,198 @@ class SimuS {
         // Alright, this is an instruction! Let's check for any arguments
         // But firt, our usual whitespace consumption
         [_,ch,line] = this.consume(WS,ch,line);
-        // Now let's look for A-Z, _, 0-9, #, @
-        // We'll deal with parsing the arguments later
-        [argc,ch,line] = this.consume(ARG,ch,line);
+        if(_.length === 0) {
+          // We didn't find any whitespace, so let's not bother looking for an
+          // argument
+          const output = {
+            // Inform what is it we're putting there so we don't have to
+            // do the regex's all over again
+            type: "instruction",
+            // The actual instruction
+            ins: word,
+            // No whitespace afterwards = no argument
+            arg: "",
+            // Any and all label that have been defined immediatelly before this
+            label: this.copyOf(this.labels)
+          };
+          // Clean labels tracker
+          this.labels = [];
+          // Put this in the intermediate array so we can turn it to hex later
+          this.intermediate.push(output);
+        } else {
+          /* There was whitespace, meaning there could be an argument!
+           * Let's look for A-Z, _, 0-9, # and @ – we'll deal with parsing the
+           * arguments later
+           */
+          [argc,ch,line] = this.consume(ARG,ch,line);
 
-        // Put this "token" on intermediate list (so it's easier later to
-        // convert everything to hex)
-        const output = {
-          // Inform what is it we're putting there so we don't have to
-          // do the regex's all over again
-          type: "instruction",
-          // The actual instruction
-          ins: word,
-          // The arguments for it
-          arg: argc,
-          // Any and all label that have been defined immediatelly before this
-          label: this.copyOf(this.labels)
-        };
-        // Clean labels tracker
-        this.labels = [];
-        // Put this in the intermediate array so we can turn it to hex later
-        this.intermediate.push(output);
+          // Put this "token" on intermediate list (so it's easier later to
+          // convert everything to hex)
+          const output = {
+            // Inform what is it we're putting there so we don't have to
+            // do the regex's all over again
+            type: "instruction",
+            // The actual instruction
+            ins: word,
+            // The arguments for it (this may very well be empty!)
+            arg: argc,
+            // Any and all label that have been defined immediatelly before this
+            label: this.copyOf(this.labels)
+          };
+          // Clean labels tracker
+          this.labels = [];
+          // Put this in the intermediate array so we can turn it to hex later
+          this.intermediate.push(output);
+        }
       }
       // What we found isn't an instruction, so let's see what else it could be
-      else {
+      // (given that is has a length, i.e. isn't just empty)
+      else if(word.trim().length) {
         // Everything from now on has at least a space after it, so let's read
-        // it already
+        // it already; first, we reset the disposable variable
+        _ = "";
+        // Then we consume whitespace
         [_,ch,line] = this.consume(WS,ch,line);
+        // And check if there was any whitespace
+        if(_.length === 0) {
+          // We didn't find whitespace, meaning there's an error already
+          // Let's complain about it
+          this.error_list.push({
+            cat: "Syntax",
+            desc: `Expected whitespace after word '${word}'`,
+            pos: this.copyOf(this.cursor)
+          });
+        } else {
+          // There's space after it! So let's finally see what it is
+          switch(word) {
+            // ORG <addr>
+            case "ORG":
+            // END <addr>
+            case "END":
+            // DS <imm>
+            case "DS":
+              // Consume a number
+              [argc,ch,line] = this.consume(NUM,ch,line);
 
-        switch(word) {
-          // ORG <addr>
-          case "ORG":
-          // END <addr>
-          case "END":
-          // DS <imm>
-          case "DS":
-            [argc,ch,line] = this.consume(/[0-9]/,ch,line);
+              // If there is no number there
+              if(argc.trim().length <= 0) {
+                // Complain about it
+                this.error_list.push({
+                  cat: "Syntax",
+                  desc: `ORG requires a number as an argument! E.g. "ORG 0"`,
+                  pos: this.copyOf(this.cursor)
+                });
+              }
+              // There's supposedly a valid argument, let's push it to the list!
+              else {
+                const output = {
+                  // Inform what is it we're putting there so we don't have to
+                  // do the regex's all over again
+                  type: "keyword",
+                  // The "instruction" is that keyword
+                  ins: word,
+                  // The arguments for it
+                  arg: argc,
+                  // Add potential labels to this
+                  label: this.copyOf(this.labels)
+                };
+                // Clean labels tracker
+                this.labels = [];
+                // Put this in the intermediate array
+                this.intermediate.push(output);
+              }
+              break;
+            // DB <imm>, <imm>, ...
+            case "DB":
+            // DW <imm>, <imm>, ...
+            case "DW":
+              // Create array to store list of values
+              const vals = [];
+              // Consume a number
+              [argc,ch,line] = this.consume(NUM,ch,line);
+              // If there's no argument here
+              if(argc.trim().length <= 0) {
+                // Let's complain a bit
 
-            if(argc.trim().length <= 0) {
-              // There's no argument to ORG?! That's absurd!
-              this.error_list.push({
-                cat: "Syntax",
-                desc: `ORG requires a number as an argument! E.g. "ORG 0"`,
-                pos: this.copyOf(this.cursor)
-              });
-            }
-            // There's supposedly a valid argument, let's push it to the list!
-            else {
+              } else {
+                // We found at least one number! Let's add it to the list
+                vals.push(+argc);
+
+                // Consume potential whitespace before comma
+                [_,ch,line] = this.consume(WS,ch,line);
+
+                // And search for more numbers
+                while(ch === ',') {
+                  // Read next character (to get rid of the previous ',')
+                  [ch,line] = this.readNext(line);
+                  // Consume potential whitespace before number
+                  [_,ch,line] = this.consume(WS,ch,line);
+                  // Consume another number
+                  [argc,ch,line] = this.consume(NUM,ch,line);
+                  // If we found a number
+                  if(argc.trim().length) {
+                    // Let's add it to the list
+                    vals.push(+argc);
+                  }
+                  // Consume potential whitespace after number
+                  [_,ch,line] = this.consume(WS,ch,line);
+                }
+
+                // We're done finding numbers!
+                const output = {
+                  // Inform what is it we're putting there so we don't have to
+                  // do the regex's all over again
+                  type: "keyword",
+                  // The "instruction" is that keyword
+                  ins: word,
+                  // The values we found
+                  arg: this.copyOf(vals),
+                  // Add potential labels to this
+                  label: this.copyOf(this.labels)
+                };
+                // Clean labels tracker
+                this.labels = [];
+                // Put this in the intermediate array
+                this.intermediate.push(output);
+              }
+              break;
+            // STR "<characters>"
+            case "STR":
+              // If there is no string opening after "STR"
+              if(ch !== '"') {
+                this.error_list.push({
+                  cat: "Syntax",
+                  desc: `No string found after STR`,
+                  pos: this.copyOf(this.cursor)
+                });
+                break;
+              }
+              // Otherwise, we're now reading the string
+              // Let's read the next character to get rid of the '"'
+              [ch,line] = this.readNext(line);
+              // Then consume every ASCII character (except '"' of course)
+              let string = "";
+              [string,ch,line] = this.consume(/[ !#-~]/,ch,line);
+              // And now we check if the string wasn't closed
+              if(ch !== '"') {
+                this.error_list.push({
+                  cat: "Syntax",
+                  desc: `Unclosed string "${string}["]`,
+                  pos: this.copyOf(this.cursor)
+                });
+                break;
+              }
+              // If we got here, then the string was closed! Let's clean up the
+              // buffer, then add the string to the intermediate memory array
+              [ch,line] = this.readNext(line);
               const output = {
                 // Inform what is it we're putting there so we don't have to
                 // do the regex's all over again
-                type: "keyword",
+                type: "string",
                 // The "instruction" is that keyword
                 ins: word,
-                // The arguments for it
-                arg: argc,
+                // The values we found
+                arg: string,
                 // Add potential labels to this
                 label: this.copyOf(this.labels)
               };
@@ -223,30 +383,68 @@ class SimuS {
               this.labels = [];
               // Put this in the intermediate array
               this.intermediate.push(output);
-            }
-            break;
-          // DB <imm>, <imm>, ...
-          case "DB":
-            break;
-          // DW <imm>, <imm>, ...
-          case "DW":
-            break;
-          // STR "<characters>"
-          case "STR":
-            break;
-          // <var> EQU <imm>
-          default:
-            break;
+              break;
+            // <var> EQU <imm>
+            default:
+              // If there's nothing here, just leave
+              if(word.trim().length <= 0) break;
+
+              /* We have <var> inside the variable <word>, and we have also read
+               * a whitespace afterwards. First, we have to make sure this is an
+               * EQU expression and not something else
+               */
+              let eq = "";
+              // Consume letters
+              [eq,ch,line] = this.consume(ALPHA,ch,line);
+              // If what we found is NOT an "EQU"
+              if(eq !== "EQU") {
+                // Complain about it
+                this.error_list.push({
+                  cat: "Syntax",
+                  desc: `Unknown expression '${word} ${eq}'`,
+                  pos: this.copyOf(this.cursor)
+                });
+                // And get out of here
+                break;
+              }
+              /* Otherwise, if we did find "EQU", we're almost good to go! All
+               * that's left is for us to read a number after the EQU. So first
+               * let's consume potential whitespace before the number
+               */
+              [_,ch,line] = this.consume(WS,ch,line);
+              // Then try to consume the number
+              let val = "";
+              [val,ch,line] = this.consume(NUM,ch,line);
+              // Check if we found a number
+              if(val.trim().length <= 0) {
+                // Uh oh! There's no number there!
+                this.error_list.push({
+                  cat: "Syntax",
+                  desc: `Invalid value for variable '${word}': '${val}'! `
+                  + `Must be a number, e.g. '${word} EQU 0'`,
+                  pos: this.copyOf(this.cursor)
+                });
+                break;
+              }
+              // Otherwise, we did find a number! Hurrah! Let's add this new
+              // variable to the list and deal with it later in parsing
+              this.variables.push({
+                name: word,
+                value: val
+              });
+              break;
+          }
         }
       }
 
-      // Alright we've gotten what we came for, but let's make sure the
-      // programmer didn't put anything else in this line
-      // Eat up some whitespace
+      /* Alright we've gotten what we came for, but let's make sure the
+       * programmer didn't put anything else in this line! First, let's eat up
+       * some whitespace
+       */
       [_,ch,line] = this.consume(WS,ch,line);
 
+      // Let's check if there's, well, *anything* left
       let garbo = "";
-      // Let's check if there's, well, anything left
       [garbo,ch,line] = this.consume(/[^ \t]/,ch,line);
 
       // If we found anything, let's complain about it
@@ -254,7 +452,7 @@ class SimuS {
         garbo = garbo.trim();
         this.error_list.push({
           cat: "Syntax",
-          desc: `Superfluous argument '${garbo}'`,
+          desc: `Unexpected character${garbo.length > 1 ? "s" : ""} '${garbo}'`,
           pos: this.copyOf(this.cursor)
         });
       }
