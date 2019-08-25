@@ -62,6 +62,7 @@
       border-color: #aeaeae;
       background-color: #282828;
       color: #eee;
+      cursor: text;
     }
     label > span {
       display: inline-block;
@@ -73,7 +74,7 @@
     main {
       height: 80%;
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: 1fr auto;
     }
     section.header {
       box-sizing: border-box;
@@ -83,6 +84,7 @@
       line-height: 3vh;
       padding: 0 48px;
       color: #aeaeae;
+      z-index: 2;
     }
     section[id$="wrapper"] {
       box-sizing: border-box;
@@ -129,8 +131,29 @@
       box-sizing: border-box;
     }
     #hex-wrapper > ol > li > .byte {
-      margin: 0 .35em;
+      margin: 0 .3em;
       font-weight: 300;
+    }
+    nav#tabs ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      user-select: none;
+    }
+    nav#tabs ul li {
+      display: inline-block;
+      padding: 0 .5em;
+      cursor: default;
+      border: 1px solid transparent;
+    }
+    nav#tabs ul li.selected {
+      background-color: #fff;
+      border-color: #aeaeae;
+      border-bottom: 1px solid #fff;
+      color: #444;
+    }
+    nav#tabs ul li:last-of-type {
+      display: none;
     }
   </style>
   <style data-for="highlights">
@@ -140,7 +163,7 @@
     #code-editor {
       margin: 0;
       border-radius: 0;
-      color: #444;
+      -webkit-text-fill-color: transparent;
       background-color: transparent;
       position: relative;
       z-index: 1;
@@ -168,7 +191,7 @@
       white-space: pre;
       box-sizing: border-box;
       line-height: 1.5;
-      color: transparent;
+      color: #3b3b3b;
       padding: 10px 10px 25px;
       height: 100%;
       width: 100%;
@@ -180,27 +203,26 @@
       display: none;
     }
     mark {
-      color: transparent;
       border-radius: 3px;
-      background-color: #fff;
+      background-color: transparent;
     }
     .highlight-number {
-      background-color: #ebdaff;
+      color: #9f31d2;
     }
     .highlight-string {
-      background-color: #d4e9ab;
+      color: #3e751e;
     }
     .highlight-operation {
-      background-color: #cce3ee;
+      color: #0070a5;
     }
     .highlight-keyword {
-      background-color: #ffcccc;
+      color: #bd3e3e;
     }
     .highlight-label {
-      background-color: #bbe4c6;
+      color: #04716f;
     }
     .highlight-comment {
-      background-color: #e0e0e0;
+      color: #6b6b6b;
     }
   </style>
 </head>
@@ -221,15 +243,24 @@
     </label>
   </header>
   <main>
+    <section class="header">
+      <nav id="tabs">
+        <ul>
+          <li class="selected">Code</li>
+          <li>Compilation</li>
+          <li>Debugging</li>
+          <li>Memory</li>
+        </ul>
+      </nav>
+    </section>
     <section class="header">Memory</section>
-    <section class="header">Code</section>
-    <section id="hex-wrapper"></section>
     <section id="code-wrapper">
       <div id="backdrop">
         <div id="highlights"></div>
       </div>
       <textarea id="code-editor" spellcheck="false"></textarea>
     </section>
+    <section id="hex-wrapper"></section>
   </main>
   <script>
     const code_editor = document.getElementById("code-editor");
@@ -246,6 +277,20 @@
       // <textarea> line numbers (by myself :D) via:
       // https://github.com/MatheusAvellar/textarea-line-numbers
       TLN.append_line_numbers("code-editor");
+
+      // Hook tab swapping events
+      const tablist = document.getElementById("tabs").firstElementChild.children;
+      // For each tab in the list
+      for(let tab of tablist) {
+        // Hook a "click" event
+        tab.addEventListener("click", function() {
+          // That removes the "selected" class from other tabs
+          for(let li of tablist)
+            li.classList.remove("selected");
+          // And adds it to itself
+          tab.classList.add("selected");
+        });
+      }
 
       // Create SimuS instance
       sim = new SimuS();
@@ -298,8 +343,7 @@
     }
     function handleInput() {
       const text = code_editor.value;
-      const highlightedText = applyHighlights(text);
-      highlights.innerHTML = highlightedText;
+      highlights.innerHTML = applyHighlights(text);
     }
     function applyHighlights(text) {
       const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
@@ -307,20 +351,33 @@
       const labelRegEx = /[A-Z_]+:/gm;
       const decimalNumbersRegEx = /\s([@#]?[0-9]+[HB]?)/mg;
       const stringsRegEx = /\"[ !#-~]*\"/g;
-      const commentsRegEx = /;.*$/mg;
+      const commentsRegEx = /(;.*)/;
 
-      // FIXME: this doesn't deal with nested regex matches. For example,
-      // the string "; Number 1" matches both for comment and for number
-      // ([; Number [1]]), when it should only match for comment
-      return text
-        .replace(/\n$/g, "\n\n")
-        .split("&").join("&amp;").split(">").join("&gt;").split("<").join("&lt;")
-        .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
-        .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
-        .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
-        .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
-        .replace(labelRegEx, `<mark class="highlight-label">$&</mark>`)
-        .replace(commentsRegEx, `<mark class="highlight-comment">$&</mark>`);
+      let out = "";
+      const lines = text.split("\n");
+
+      for(let i = 0; i < lines.length; i++) {
+        const arr = lines[i].split(commentsRegEx);
+        out += xss(arr[0])
+          .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
+          .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
+          .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
+          .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
+          .replace(labelRegEx, `<mark class="highlight-label">$&</mark>`);
+
+        if(arr.length > 1 && arr[1].length) {
+          out += `<mark class="highlight-comment">${xss(arr[1])}</mark>`;
+        }
+        out += "\n";
+      }
+
+      return out.replace(/\n$/g, "\n\n");
+    }
+    function xss(text) {
+      return (text || "")
+        .split("&").join("&amp;")
+        .split(">").join("&gt;")
+        .split("<").join("&lt;");
     }
     function handleScroll() {
       highlights.scrollTop = code_editor.scrollTop;
