@@ -229,7 +229,7 @@
 <body onload="init();">
   <header>
     <nav>
-      <button> Compile </button>
+      <button id="compile-btn"> Compile </button>
       <button disabled> Run </button>
       <button disabled> Step </button>
     </nav>
@@ -294,6 +294,12 @@
 
       // Create SimuS instance
       sim = new SimuS();
+
+      document.getElementById("compile-btn").addEventListener("click", function() {
+        const res = sim.compile(code_editor.value);
+        if(res === -1) console.warn("Compilation error");
+        else console.warn("Compiled successfully");
+      });
     }
 
     // Syntax Highlighting on <textarea> trick via:
@@ -349,7 +355,7 @@
       const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
       const keywordRegEx = /\b(ORG|END|DS|DB|DW|STR|EQU)\b/g;
       const labelRegEx = /[A-Z_]+:/gm;
-      const decimalNumbersRegEx = /\s([@#]?[0-9]+[HB]?)/mg;
+      const decimalNumbersRegEx = /[@#]?[0-9]+[HB]?/g;
       const stringsRegEx = /\"[ !#-~]*\"/g;
       const commentsRegEx = /(;.*)/;
 
@@ -358,9 +364,11 @@
 
       for(let i = 0; i < lines.length; i++) {
         const arr = lines[i].split(commentsRegEx);
+        // FIXME: Numbers inside a string are getting recognized as numbers
+        // and not as part of the string; i.e. STR ["string [3] string"]
         out += xss(arr[0])
           .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
-          .replace(decimalNumbersRegEx, ` <mark class="highlight-number">$1</mark>`)
+          .replace(decimalNumbersRegEx, `<mark class="highlight-number">$&</mark>`)
           .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
           .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
           .replace(labelRegEx, `<mark class="highlight-label">$&</mark>`);

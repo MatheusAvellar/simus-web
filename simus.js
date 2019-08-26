@@ -53,6 +53,10 @@ class SimuS {
       TRAP:0b11110000,
       HLT: 0b11111111
     };
+
+    this.keywords = [
+      "ORG", "EQU", "END", "DS", "DB", "DW", "STR"
+    ];
   }
 
   copyOf(obj) {
@@ -65,7 +69,17 @@ class SimuS {
     return [next_char, program]
   }
 
-  loadProgram(program) {
+  callError(lines) {
+    for(let i = 0; i < this.error_list.length; i++) {
+      const err = this.error_list[i];
+      console.warn(`in.asm:${err.pos.line}:${err.pos.column}: ${err.cat} error!
+${err.desc}
+| ${lines[err.pos.line-1]}
+  ${" ".repeat(Math.max(err.pos.column-1,0))}^${"~".repeat(Math.max(err.len-1,0))}`);
+    }
+  }
+
+  reset() {
     // Reset memory pointer to default (0)
     this.mem_ptr = 0;
     // Reset error list
@@ -78,21 +92,47 @@ class SimuS {
     this.variables = [];
     // Clear labels list
     this.labels = [];
+  }
 
+  compile(source,opt) {
+    // Reset compiler state
+    this.reset();
+
+    // FIXME: Rename this function to something more adequate
+    this.loadProgram(source);
+
+    // If there were no syntax errors
+    if(!this.error_list.length) {
+      this.parser();
+    } else {
+      this.reset();
+      return -1;
+    }
+
+    // If there were no errors at all
+    if(!this.error_list.length) {
+      return 0;
+    }
+    // Otherwise, if there were any errors
+    this.reset();
+    return -1;
+  }
+
+  loadProgram(program) {
     // Split each line of the program
-    program = program.split("\n");
+    const lines = program.split("\n");
 
     // Compile each line
-    while(program.length > 0) {
+    while(lines.length > 0) {
       // Reposition cursor
       this.cursor.line++;
       this.cursor.column = 0;
       // Analyse syntax on next line
-      this.lexer(program.shift());
+      this.lexer(lines.shift());
     }
     // If there were any errors, report them
     if(this.error_list.length > 0) {
-      this.callError();
+      this.callError(program.split("\n"));
     }
   }
 
@@ -149,7 +189,11 @@ class SimuS {
         this.error_list.push({
           cat: "Syntax",
           desc: `Unexpected non-word '${word}'`,
-          pos: this.copyOf(this.cursor)
+          pos: {
+            line: this.cursor.line,
+            column: this.cursor.column - word.length
+          },
+          len: word.length
         });
       }
     }
@@ -161,6 +205,20 @@ class SimuS {
        * find
        */
       while(ch === ':') {
+        // Verify that the label isn't a reserved word
+        if(this.operations.hasOwnProperty(word)
+        || this.keywords.indexOf(word) !== -1) {
+          // If it is, log error
+          this.error_list.push({
+            cat: "Syntax",
+            desc: `Invalid label name: '${word}' is a reserved word`,
+            pos: {
+              line: this.cursor.line,
+              column: this.cursor.column - `${word}`.length
+            },
+            len: word.length
+          });
+        }
         // Add label to temporary storage so we can point it to the next
         // instruction
         this.labels.push(word);
@@ -243,7 +301,8 @@ class SimuS {
           this.error_list.push({
             cat: "Syntax",
             desc: `Expected whitespace after word '${word}'`,
-            pos: this.copyOf(this.cursor)
+            pos: this.copyOf(this.cursor),
+            len: 0
           });
         } else {
           // There's space after it! So let's finally see what it is
@@ -263,7 +322,8 @@ class SimuS {
                 this.error_list.push({
                   cat: "Syntax",
                   desc: `ORG requires a number as an argument! E.g. "ORG 0"`,
-                  pos: this.copyOf(this.cursor)
+                  pos: this.copyOf(this.cursor),
+                  len: 0
                 });
               }
               // There's supposedly a valid argument, let's push it to the list!
@@ -346,7 +406,8 @@ class SimuS {
                 this.error_list.push({
                   cat: "Syntax",
                   desc: `No string found after STR`,
-                  pos: this.copyOf(this.cursor)
+                  pos: this.copyOf(this.cursor),
+                  len: 0
                 });
                 break;
               }
@@ -361,7 +422,8 @@ class SimuS {
                 this.error_list.push({
                   cat: "Syntax",
                   desc: `Unclosed string "${string}["]`,
-                  pos: this.copyOf(this.cursor)
+                  pos: this.copyOf(this.cursor),
+                  len: 0
                 });
                 break;
               }
@@ -371,7 +433,7 @@ class SimuS {
               const output = {
                 // Inform what is it we're putting there so we don't have to
                 // do the regex's all over again
-                type: "string",
+                type: "keyword",
                 // The "instruction" is that keyword
                 ins: word,
                 // The values we found
@@ -402,7 +464,11 @@ class SimuS {
                 this.error_list.push({
                   cat: "Syntax",
                   desc: `Unknown expression '${word} ${eq}'`,
-                  pos: this.copyOf(this.cursor)
+                  pos: {
+                    line: this.cursor.line,
+                    column: this.cursor.column - `${word} ${eq}`.length
+                  },
+                  len: `${word} ${eq}`.length
                 });
                 // And get out of here
                 break;
@@ -420,9 +486,10 @@ class SimuS {
                 // Uh oh! There's no number there!
                 this.error_list.push({
                   cat: "Syntax",
-                  desc: `Invalid value for variable '${word}': '${val}'! `
+                  desc: `Invalid value for variable '${word}' `
                   + `Must be a number, e.g. '${word} EQU 0'`,
-                  pos: this.copyOf(this.cursor)
+                  pos: this.copyOf(this.cursor),
+                  len: 0
                 });
                 break;
               }
@@ -437,33 +504,31 @@ class SimuS {
         }
       }
 
-      /* Alright we've gotten what we came for, but let's make sure the
-       * programmer didn't put anything else in this line! First, let's eat up
-       * some whitespace
-       */
+      // Alright we've gotten what we came for, but let's make sure the
+      // programmer didn't put anything else in this line!
+      // If there's anything, let's complain about it
       [_,ch,line] = this.consume(WS,ch,line);
-
-      // Let's check if there's, well, *anything* left
-      let garbo = "";
-      [garbo,ch,line] = this.consume(/[^ \t]/,ch,line);
-
-      // If we found anything, let's complain about it
-      if(garbo.trim().length > 0) {
-        garbo = garbo.trim();
+      const garbo = [ch,...line].join("").trim();
+      if(garbo.length > 0) {
         this.error_list.push({
           cat: "Syntax",
           desc: `Unexpected character${garbo.length > 1 ? "s" : ""} '${garbo}'`,
-          pos: this.copyOf(this.cursor)
+          pos: this.copyOf(this.cursor),
+          len: garbo.length
         });
       }
     }
   }
 
-  callError() {
-    if(this.error_list.length <= 0) return;
-    for(let i of this.error_list) {
-      console.warn(`${i.cat} error on line ${i.pos.line}, column ${i.pos.column}
-${i.desc}`);
-    }
+  parser() {
+    //for(let i = 0; i < this.intermediate.length; i++) {
+
+      /*{ type:  "keyword"
+          ins:   word
+          arg:   string
+          label: this.copyOf(this.labels) }*/
+
+      //this.intermediate[i]
+    //}
   }
 }
