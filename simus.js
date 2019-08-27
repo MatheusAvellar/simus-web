@@ -1,14 +1,9 @@
 class SimuS {
   constructor() {
-    this.memory = new Uint8Array(257);
+    this.MEMORY_SIZE = 0x800;
+    this.memory = new Uint8Array(this.MEMORY_SIZE/8);
 
     this.error_list = [];
-    this.error_t = {
-      NONE: 0,
-      INVALID_OP: 1,
-      INVALID_ARG: 2,
-      MILD: 3
-    };
 
     this.intermediate = [];
     this.labels = [];
@@ -521,14 +516,71 @@ ${err.desc}
   }
 
   parser() {
-    //for(let i = 0; i < this.intermediate.length; i++) {
+    // Loop through everything in intermediate memory
+    for(let i = 0; i < this.intermediate.length; i++) {
+      // Current operation
+      const op = this.intermediate[i];
+      switch(op.type) {
+        case "keyword":
+          switch(op.ins) {
+            case "ORG":
+              if(isNaN(+op.arg)) {
+                // In theory, ORG receives only numbers as arguments, and that's
+                // being checked on the Lexer. I can't think of a way for it to
+                // get here with a non-number, but better safe than sorry
+                console.log("(!) This point shouldn't be possible to reach");
+                this.error_list.push({
+                  cat: "Parse",
+                  desc: `Invalid non-number argument to ORG: '${op.arg}'`,
+                  pos: this.copyOf(this.cursor),
+                  len: op.arg.length
+                });
+                return;
+              } else if(+op.arg > this.MEMORY_SIZE-1) {
+                this.error_list.push({
+                  cat: "Parse",
+                  desc: `Invalid out of bounds argument to ORG: '${op.arg}'`,
+                  pos: this.copyOf(this.cursor),
+                  len: op.arg.length
+                });
+                return;
+              } else {
+                this.mem_ptr = +op.arg;
+                continue;
+              }
+              break;
 
-      /*{ type:  "keyword"
-          ins:   word
-          arg:   string
-          label: this.copyOf(this.labels) }*/
+            default:
+              break;
+          }
+          break;
 
-      //this.intermediate[i]
-    //}
+        case "instruction":
+          if(this.operations.hasOwnProperty(op.ins)) {
+            if(this.memory[this.mem_ptr] !== 0) {
+              console.warn(`Overwriting memory at position ${this.mem_ptr}`);
+            }
+            // TODO: Different instruction value depending on argument!
+            this.memory[this.mem_ptr] = this.operations[op.ins];
+            this.mem_ptr++;
+            // TODO: Add argument to memory
+          } else {
+            // I can't think of a way of a word being tagged as an instruction
+            // during lexing, but not existing during parsing; in any case, it
+            // won't hurt to check
+            console.log("(!) This point shouldn't be possible to reach");
+            this.error_list.push({
+              cat: "Parse",
+              desc: `Unrecognized instruction '${op.ins}'`,
+              pos: this.copyOf(this.cursor),
+              len: op.ins.length
+            });
+          }
+          break;
+        default:
+          break;
+      }
+      /*{ type, ins, arg, label }*/
+    }
   }
 }
