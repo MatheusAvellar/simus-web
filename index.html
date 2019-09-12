@@ -21,10 +21,11 @@
     }
     header {
       height: 20%;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-around;
       margin: 0 1em;
+    }
+    header > label {
+      display: block;
+      margin: 4px 0;
     }
     button {
       border-radius: 3px;
@@ -44,7 +45,7 @@
       border-color: #898989;
     }
     input,output {
-      width: 100%;
+      width: calc(100% - 5.5em);
       max-width: 600px;
       padding: 0.5em 1em;
       border-radius: 3px;
@@ -111,7 +112,7 @@
     #hex-wrapper > ol > li {
       display: flex;
       flex-direction: row;
-      justify-content: center;
+      justify-content: space-between;
       align-items: center;
       line-height: 1.7em;
       border-bottom: 1px solid #aeaeae;
@@ -152,8 +153,22 @@
       border-bottom: 1px solid #fff;
       color: #444;
     }
-    nav#tabs ul li:last-of-type {
-      display: none;
+
+    @media screen and (max-width: 1000px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+      section.header:nth-of-type(2){
+        display: none;
+      }
+      #hex-wrapper > ol > li > .byte:last-of-type {
+        margin-right: 48px;
+      }
+    }
+    @media screen and (max-width: 700px) {
+      #hex-wrapper > ol > li > .byte:last-of-type {
+        margin-right: .3em;
+      }
     }
   </style>
   <style data-for="highlights">
@@ -247,9 +262,8 @@
       <nav id="tabs">
         <ul>
           <li class="selected">Code</li>
-          <li>Compilation</li>
-          <li>Debugging</li>
-          <li>Memory</li>
+          <li style="opacity:.5;font-style:italic">Compilation</li>
+          <li style="opacity:.5;font-style:italic">Debugging</li>
         </ul>
       </nav>
     </section>
@@ -284,10 +298,18 @@
       for(let tab of tablist) {
         // Hook a "click" event
         tab.addEventListener("click", function() {
-          // That removes the "selected" class from other tabs
+          // Get index of current tab (0, 1, ...)
+          /// let index = 0;
+          /// for(let node = tab; node = node.previousElementSibling; index++);
+          // Hide all screens
+          /// TODO
+          // Show current screen based on selected tab
+          /// TODO
+
+          // Remove the "selected" class from other tabs
           for(let li of tablist)
             li.classList.remove("selected");
-          // And adds it to itself
+          // And add it to itself
           tab.classList.add("selected");
         });
       }
@@ -490,5 +512,29 @@ END 0`;
   <link href="./tln.min.css" rel="stylesheet"/>
   <script src="./tln.min.js"></script>
   <script src="./simus.js"></script>
+
+  <style data-for="tln">
+    @media screen and (max-width: 400px) {
+      body {
+        font-size: 12px;
+      }
+      .tln-active, .tln-line, .tln-line::before {
+        font-size: inherit;
+      }
+      .tln-active {
+        width: calc(100% - 40px);
+      }
+      .tln-wrapper {
+        width: 40px;
+      }
+      section.header {
+        padding: 0 40px;
+      }
+      #backdrop {
+        width: calc(100% - 40px);
+        margin-left: 40px;
+      }
+    }
+  </style>
 </body>
 </html>
