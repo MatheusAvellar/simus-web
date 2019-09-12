@@ -75,6 +75,13 @@ ${err.desc}
   }
 
   reset() {
+    // Reset memory
+    this.memory = new Uint8Array(this.MEMORY_SIZE/8);
+    // Reset memory UI
+    [...document.getElementsByClassName("changed")].forEach(e => {
+      e.innerText = "00";
+      e.classList.remove("changed");
+    });
     // Reset memory pointer to default (0)
     this.mem_ptr = 0;
     // Reset error list
@@ -561,9 +568,15 @@ ${err.desc}
               console.warn(`Overwriting memory at position ${this.mem_ptr}`);
             }
             // TODO: Different instruction value depending on argument!
-            this.memory[this.mem_ptr] = this.operations[op.ins];
+            this.setMemory(this.mem_ptr,this.operations[op.ins]);
+            // TODO: Only move pointer if we're done here (i.e. we don't need to
+            // change instruction value)
             this.mem_ptr++;
             // TODO: Add argument to memory
+            if(op.arg) {
+              // Check if it's a label, variable or number / address
+              // Check if it's direct, indirect, etc (e.g. 0, #0, @0, ...)
+            }
           } else {
             // I can't think of a way of a word being tagged as an instruction
             // during lexing, but not existing during parsing; in any case, it
@@ -582,5 +595,20 @@ ${err.desc}
       }
       /*{ type, ins, arg, label }*/
     }
+  }
+
+  setMemory(index,value) {
+    index = +index;
+    value = +value;
+    if(isNaN(index) || isNaN(value))
+      return;
+
+    // Update internal memory
+    this.memory[index] = value;
+    // Update UI
+    const elementID = index.toString(16).toUpperCase().padStart(4,"0");
+    const elementRef = document.getElementById(elementID);
+    elementRef.innerText = value.toString(16).toUpperCase().padStart(2,"0");
+    elementRef.classList.add("changed");
   }
 }
