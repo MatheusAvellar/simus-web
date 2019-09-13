@@ -39,8 +39,7 @@
   position: absolute;
   font-family: "Roboto Mono",monospace;
   border: 1px solid transparent;
-  overflow-wrap: normal;
-  overflow-x: auto;
+  overflow: hidden;
   white-space: pre;
   -webkit-box-sizing: border-box;
      -moz-box-sizing: border-box;
