@@ -1,0 +1,83 @@
+#code-wrapper {
+  position: relative;
+}
+#code-editor {
+  -webkit-text-fill-color: transparent;
+  color: #000;
+  margin: 0;
+  -webkit-border-radius: 0;
+     -moz-border-radius: 0;
+          border-radius: 0;
+  position: relative;
+  z-index: 1;
+  tab-size: 2;
+  -o-tab-size: 2;
+  -moz-tab-size: 2;
+}
+@supports (caret-color: #000) {
+  #code-editor {
+    color: transparent;
+    caret-color: #000;
+  }
+}
+#backdrop {
+  width: -webkit-calc(100% - 48px);
+  width: -moz-calc(100% - 48px);
+  width: calc(100% - 48px);
+  height: 100%;
+  margin-left: 48px;
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+  position: absolute;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: #fff;
+}
+#highlights {
+  position: absolute;
+  font-family: "Roboto Mono",monospace;
+  border: 1px solid transparent;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  white-space: pre;
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+  line-height: 1.5;
+  color: #3b3b3b;
+  padding: 10px 10px 25px;
+  height: 100%;
+  width: 100%;
+  tab-size: 2;
+  -o-tab-size: 2;
+  -moz-tab-size: 2;
+}
+#highlights.hidden {
+  display: none;
+}
+mark {
+  -webkit-border-radius: 3px;
+     -moz-border-radius: 3px;
+          border-radius: 3px;
+  background-color: transparent;
+}
+.highlight-number {
+  color: #9f31d2;
+}
+.highlight-string {
+  color: #3e751e;
+}
+.highlight-operation {
+  color: #0070a5;
+}
+.highlight-keyword {
+  color: #bd3e3e;
+}
+.highlight-label {
+  color: #04716f;
+}
+.highlight-comment {
+  color: #6b6b6b;
+}

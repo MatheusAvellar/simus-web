@@ -19,6 +19,9 @@
       min-width: 100%;
       min-height: 100%;
     }
+    header, main {
+      contain: content;
+    }
     header {
       height: 20%;
       margin: 0 1em;
@@ -93,6 +96,7 @@
       font-family: "Roboto Mono", monospace;
     }
     #code-editor {
+      background-color: transparent;
       border-right-width: 0;
       border-bottom-width: 0;
     }
@@ -116,6 +120,7 @@
       align-items: center;
       line-height: 1.7em;
       border-bottom: 1px solid #aeaeae;
+      contain: content;
     }
     #hex-wrapper > ol > li:hover {
       background-color: #e0e0ff;
@@ -169,80 +174,17 @@
       #hex-wrapper > ol > li > .byte:last-of-type {
         margin-right: 48px;
       }
+      #code-wrapper {
+        height: 60vh;
+      }
+      #hex-wrapper {
+        height: 17vh;
+      }
     }
     @media screen and (max-width: 700px) {
       #hex-wrapper > ol > li > .byte:last-of-type {
         margin-right: .3em;
       }
-    }
-  </style>
-  <style data-for="highlights">
-    #code-wrapper {
-      position: relative;
-    }
-    #code-editor {
-      margin: 0;
-      border-radius: 0;
-      -webkit-text-fill-color: transparent;
-      background-color: transparent;
-      position: relative;
-      z-index: 1;
-      tab-size: 2;
-      -o-tab-size: 2;
-      -moz-tab-size: 2;
-    }
-    #backdrop {
-      width: calc(100% - 48px);
-      height: 100%;
-      margin-left: 48px;
-      box-sizing: border-box;
-      position: absolute;
-      z-index: 0;
-      overflow: hidden;
-      pointer-events: none;
-      background-color: #fff;
-    }
-    #highlights {
-      position: absolute;
-      font-family: "Roboto Mono",monospace;
-      border: 1px solid transparent;
-      overflow-wrap: normal;
-      overflow-x: auto;
-      white-space: pre;
-      box-sizing: border-box;
-      line-height: 1.5;
-      color: #3b3b3b;
-      padding: 10px 10px 25px;
-      height: 100%;
-      width: 100%;
-      tab-size: 2;
-      -o-tab-size: 2;
-      -moz-tab-size: 2;
-    }
-    #highlights.hidden {
-      display: none;
-    }
-    mark {
-      border-radius: 3px;
-      background-color: transparent;
-    }
-    .highlight-number {
-      color: #9f31d2;
-    }
-    .highlight-string {
-      color: #3e751e;
-    }
-    .highlight-operation {
-      color: #0070a5;
-    }
-    .highlight-keyword {
-      color: #bd3e3e;
-    }
-    .highlight-label {
-      color: #04716f;
-    }
-    .highlight-comment {
-      color: #6b6b6b;
     }
   </style>
 </head>
@@ -379,10 +321,10 @@
       highlights.innerHTML = applyHighlights(text);
     }
     function applyHighlights(text) {
-      const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/g;
-      const keywordRegEx = /\b(ORG|END|DS|DB|DW|STR|EQU)\b/g;
-      const labelRegEx = /[A-Z_]+:/gm;
-      const decimalNumbersRegEx = /[@#]?[0-9]+[HB]?/g;
+      const operationsRegEx = /\b(NOP|STA|STS|LDA|LDS|ADD|ADC|SUB|SBC|OR|XOR|AND|NOT|SHL|SHR|SRA|JMP|JN|JP|JZ|JNZ|JC|JNC|IN|OUT|JSR|RET|PUSH|POP|TRAP|HLT)\b/gi;
+      const keywordRegEx = /\b(ORG|END|DS|DB|DW|STR|EQU)\b/gi;
+      const labelRegEx = /[A-Z_]+:/gim;
+      const decimalNumbersRegEx = /[@#]?[0-9]+[A-F]*[HB]?/gi;
       const stringsRegEx = /\"[ !#-~]*\"/g;
       const commentsRegEx = /(;.*)/;
 
@@ -480,46 +422,77 @@
     }
 
     // Insert sample code into editor
-    code_editor.value = `ORG 0
+    code_editor.value = `ORG 100
+BANNER      EQU 2
+CLEARBANNER EQU 3
 
-INICIO:
-; Faz a leitura do painel de chaves
-     IN  0
-     STA A
-; Se a entrada for 0 termina o programa
-     OR  #0
-     JZ  FIM
-; Testa se é par (bit 0=0)
-     LDA A
-     AND #1
-     JNZ SENAO
-; Se for, faz pares++
-     LDA PARES
-     ADD #1
-     STA PARES
-     JMP INICIO
-SENAO:
-; Incrementa I
-     LDA IMPARES
-     ADD #1
-     STA IMPARES
-     JMP INICIO
-FIM: HLT
+EVEN:   DB 0
+ODD:    DB 0
 
-ORG 100
-A:       DS 1
-PARES:   DS 1
-IMPARES: DS 1
+SIZE:   DB 10
+I:      DB 0
+A:      DW ARR
+ARR:    DB 0,1,2,3,4,5,6,7,8,9
 
-END 0`;
+ORG 0
+MAIN:
+  OUT CLEARBANNER    ; Limpa o banner
+  LDS A              ; Carrega o vetor no SP
+
+LOOP:
+  LDA I              ;
+  ADD #1             ; I++
+  STA I              ;
+
+  POP                ; Pega um elemento do vetor
+  AND #1             ; Testa se é ímpar
+  JNZ COUNT_ODD      ; Se for ímpar, vai para COUNT_ODD
+                     ; Senão, vai para COUNT_ODD
+COUNT_EVEN:
+  LDA EVEN           ;
+  ADD #1             ; EVEN++
+  STA EVEN           ;
+  JMP CHECK_IF_OVER  ; Vai para CHECK_IF_OVER
+
+COUNT_ODD:
+  LDA ODD            ;
+  ADD #1             ; ODD++
+  STA ODD            ;
+                     ; Vai para CHECK_IF_OVER
+CHECK_IF_OVER:
+  LDA I
+  XOR SIZE           ; Se I ^ SIZE != 0...
+  JNZ LOOP           ; ...volta para o loop
+
+PRINT:
+  LDA EVEN           ; Carrega pares
+  ADD #30H           ; Dígitos em ASCII ficam em 0x30-0x39
+  OUT BANNER         ; Imprime o número
+  JSR SPACING        ; Imprime espaçamento
+  LDA ODD            ; Carrega ímpares
+  ADD #30H           ; Dígito em ASCII
+  OUT BANNER         ; Imprime o número
+  JSR SPACING        ; Imprime espaçamento
+  HLT                ; Fim
+
+SPACING:
+  LDA #20H           ; Espaço em ASCII
+  OUT BANNER         ; Imprime
+  LDA #0AH           ; Quebra de linha em ASCII
+  OUT BANNER         ; Imprime
+  RET                ; Retorna da subrotina
+`;
   </script>
   <link href="https://fonts.googleapis.com/css?family=Roboto+Mono:300,400&display=swap" rel="stylesheet"/>
   <link href="./tln.min.css" rel="stylesheet"/>
   <script src="./tln.min.js"></script>
   <script src="./simus.js"></script>
-
+  <link href="./highlights.css" rel="stylesheet" data-for="highlights"/>
   <style data-for="tln">
-    @media screen and (max-width: 400px) {
+    .tln-line:last-of-type {
+      margin-bottom: 35px;
+    }
+    @media screen and (max-width: 450px) {
       body {
         font-size: 12px;
       }
@@ -527,6 +500,7 @@ END 0`;
         font-size: inherit;
       }
       .tln-active {
+        background-color: transparent;
         width: calc(100% - 40px);
       }
       .tln-wrapper {
