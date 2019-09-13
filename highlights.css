@@ -80,3 +80,22 @@ mark {
 .highlight-comment {
   color: #6b6b6b;
 }
+
+.highlight-space {
+  color: transparent;
+  position: relative;
+}
+.highlight-space::before {
+  content: "·";
+  color: #ccc;
+  position: absolute;
+}
+.highlight-newline::before {
+  content: "↵";
+  color: #ddd;
+}
+
+.nowhitespace .highlight-newline::before,
+.nowhitespace .highlight-space::before {
+  display: none;
+}

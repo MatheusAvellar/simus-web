@@ -203,6 +203,10 @@
       <span>Output:</span>
       <output>SIMUS</output>
     </label>
+    <label>
+      <span>Show whitespace</span>
+      <input id="whitespace-checkbox" type="checkbox">
+    </label>
   </header>
   <main>
     <section class="header">
@@ -216,7 +220,7 @@
     </section>
     <section class="header">Memory</section>
     <section id="code-wrapper">
-      <div id="backdrop">
+      <div id="backdrop" class="nowhitespace">
         <div id="highlights"></div>
       </div>
       <textarea id="code-editor" spellcheck="false"></textarea>
@@ -260,6 +264,13 @@
           tab.classList.add("selected");
         });
       }
+
+      document.getElementById("whitespace-checkbox").addEventListener("input", function() {
+        if(this.checked)
+          backdrop.classList.remove("nowhitespace");
+        else
+          backdrop.classList.add("nowhitespace");
+      });
 
       // Create SimuS instance
       sim = new SimuS();
@@ -329,6 +340,7 @@
       const decimalNumbersRegEx = /[@#]?[0-9]+[A-F]*[HB]?/gi;
       const stringsRegEx = /\"[ !#-~]*\"/g;
       const commentsRegEx = /(;.*)/;
+      const spaceRegEx = / /g;
 
       let out = "";
       const lines = text.split("\n");
@@ -339,6 +351,7 @@
         // and not as part of the string; i.e. STR ["string [3] string"]
         out += xss(arr[0])
           .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
+          .replace(spaceRegEx, `<mark class="highlight-space">$&</mark>`)
           .replace(decimalNumbersRegEx, `<mark class="highlight-number">$&</mark>`)
           .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
           .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
@@ -347,7 +360,7 @@
         if(arr.length > 1 && arr[1].length) {
           out += `<mark class="highlight-comment">${xss(arr[1])}</mark>`;
         }
-        out += "\n";
+        out += `<mark class="highlight-newline"></mark>\n`;
       }
 
       return out.replace(/\n$/g, "\n\n");
@@ -495,7 +508,7 @@ SPACING:
       margin-bottom: 35px;
     }
     @media screen and (max-width: 450px) {
-      body {
+      :root {
         font-size: 12px;
       }
       .tln-active, .tln-line, .tln-line::before {

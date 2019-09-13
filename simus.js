@@ -409,10 +409,10 @@ ${err.desc}
 
     /* V() */
     /* V => L() C()*/
-    /* L => [LABEL:] L() | "" */
+    /* L => [label] L() | "" */
     /* C => I() A() */
-    /* I => [CMD] (EQU) */
-    /* A => [@#0-9A-Z] , A() | "" */
+    /* I => [id] (EQU [num]) */
+    /* A => [id|num|imm|@[id|num]] (, A()) | "" */
     function V() {
       // Labels
       L();
