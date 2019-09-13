@@ -266,8 +266,10 @@
 
       document.getElementById("compile-btn").addEventListener("click", function() {
         const res = sim.compile(code_editor.value);
-        if(res === -1) console.warn("Compilation error");
-        else console.warn("Compiled successfully");
+        if(res === -1)
+          console.warn("Compilation error");
+        else
+          console.warn("Compiled successfully");
       });
     }
 
