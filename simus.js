@@ -208,16 +208,41 @@ ${err.desc}
           [ch,line] = this.readNext(line);
           continue;
         }
-        // We found an ID, let's save it and continue
-        pushLexeme({
-          typ: "id",
-          val: word,
-          pos: {
-            line: this.cursor.line,
-            column: this.cursor.column - word.length
-          },
-          len: word.length
-        });
+        // We found an ID; let's check if it's a keyword or not
+        if(this.operations.hasOwnProperty(word.toUpperCase())) {
+          // It's an instruction
+          pushLexeme({
+            typ: "instruction",
+            val: word,
+            pos: {
+              line: this.cursor.line,
+              column: this.cursor.column - word.length
+            },
+            len: word.length
+          });
+        } else if(this.keywords.indexOf(word.toUpperCase()) > -1) {
+          // It's a keyword
+          pushLexeme({
+            typ: "keyword",
+            val: word,
+            pos: {
+              line: this.cursor.line,
+              column: this.cursor.column - word.length
+            },
+            len: word.length
+          });
+        } else {
+          // It's an identifier
+          pushLexeme({
+            typ: "id",
+            val: word,
+            pos: {
+              line: this.cursor.line,
+              column: this.cursor.column - word.length
+            },
+            len: word.length
+          });
+        }
         continue;
       }
       // If we found an immediate value (#<number>)
@@ -432,17 +457,36 @@ ${err.desc}
       I();
       // Argument
       A();
+
+      // If there's anything left after the argument(s)
+      if(getTokenTyp()) {
+        token_match("nothing", "C");
+      }
     }
 
     function I() {
-      // Match an ID
-      token_match("id", "I");
-      // If "<id> EQU"...
-      if(getTokenVal() === "EQU") {
-        // Then match the EQU
-        token_match("id", "I");
-        // And a number (i.e. <id> EQU <number>)
-        token_match("number", "I");
+      let _current_type = getTokenTyp();
+      switch(_current_type) {
+        // If it starts with ID, it has to be <id> EQU <number>
+        case "id":
+          // Match an ID
+          token_match("id", "I");
+          // Then match EQU
+          if(getTokenVal() === "EQU") {
+            token_match("keyword", "I");
+          } else {
+            // If it's not EQU, we need to error this out
+            token_match("EQU keyword", "I");
+          }
+          // Lastly, match a number
+          token_match("number", "I");
+          break;
+        case "instruction":
+          token_match("instruction", "I");
+          break;
+        default:
+          token_match("keyword", "I");
+          break;
       }
     }
 
@@ -450,8 +494,9 @@ ${err.desc}
       // Check if we have any argument
       let _current_type = getTokenTyp();
       switch(_current_type) {
-        // Arguments can be IDs, numbers, immediate values...
+        // Arguments can be IDs, strings, numbers, immediate values...
         case "id":
+        case "string":
         case "number":
         case "immediate value":
           token_match(_current_type, "A");
@@ -469,8 +514,12 @@ ${err.desc}
           }
           break;
         default:
-          if(mandatory)
+          // If we *must* have an argument, but didn't match
+          // any of the types before
+          if(mandatory) {
+            // Then error it out
             token_match("argument", "A");
+          }
           break;
       }
       // Check if there's a list of arguments

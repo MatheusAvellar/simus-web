@@ -233,6 +233,27 @@
     const backdrop = document.getElementById("backdrop");
     let sim;
 
+    HTMLTextAreaElement.prototype.insertAtCaret = function(text) {
+      text = text || '';
+      if(document.selection) {
+        // IE
+        this.focus();
+        let sel = document.selection.createRange();
+        sel.text = text;
+      } else if(this.selectionStart || this.selectionStart === 0) {
+        // Others
+        let startPos = this.selectionStart;
+        let endPos = this.selectionEnd;
+        this.value = this.value.substring(0, startPos) +
+          text +
+          this.value.substring(endPos, this.value.length);
+        this.selectionStart = startPos + text.length;
+        this.selectionEnd = startPos + text.length;
+      } else {
+        this.value += text;
+      }
+    };
+
     function init() {
       toggleSyntaxHighlighting(true);
 
@@ -276,7 +297,9 @@
       sim = new SimuS();
 
       document.getElementById("compile-btn").addEventListener("click", function() {
+        const startTime = performance.now();
         const res = sim.compile(code_editor.value);
+        console.log(`Compilation took ${(performance.now() - startTime).toFixed(3)}ms`);
         if(res === -1)
           console.warn("Compilation error");
         else
@@ -294,6 +317,7 @@
 
       // Event names and handlers
       const eventHooks = [
+        { name: "keydown", fun: handleKeyDown },
         { name: "input", fun: handleInput },
         { name: "input", fun: handleScroll },
         { name: "scroll", fun: handleScroll },
@@ -329,6 +353,17 @@
       // Update syntax highlighting tracking variable
       syntaxHighlightingAlreadyOn = turnOn;
     }
+    function handleKeyDown(e) {
+      if(e.key === "Tab" || e.keyCode === 9) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // FIXME: Shift+Tab should unindent
+        // FIXME: Ctrl+Z resets after this
+        this.insertAtCaret("  ");
+        handleInput();
+      }
+    }
     function handleInput() {
       const text = code_editor.value;
       highlights.innerHTML = applyHighlights(text);
@@ -351,7 +386,6 @@
         // and not as part of the string; i.e. STR ["string [3] string"]
         out += xss(arr[0])
           .replace(stringsRegEx, `<mark class="highlight-string">$&</mark>`)
-          .replace(spaceRegEx, `<mark class="highlight-space">$&</mark>`)
           .replace(decimalNumbersRegEx, `<mark class="highlight-number">$&</mark>`)
           .replace(operationsRegEx, `<mark class="highlight-operation">$&</mark>`)
           .replace(keywordRegEx, `<mark class="highlight-keyword">$&</mark>`)
